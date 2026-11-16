@@ -1,55 +1,74 @@
 name: Build NEW DUBAI APK
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+workflow_dispatch:
+push:
+branches:
+- main
 
 permissions:
-  contents: read
+contents: read
 
 jobs:
-  build:
-    name: Build Android APK
-    runs-on: ubuntu-latest
+build:
+name: Build Android APK
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+steps:
+  - name: Checkout Repository
+    uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
+  - name: Setup Java 17
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: '17'
+      cache: gradle
 
-      - name: Accept Android licenses
-        run: yes | sdkmanager --licenses || true
+  - name: Setup Android SDK
+    uses: android-actions/setup-android@v4
 
-      - name: Install Android SDK packages
-        run: |
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
+  - name: Install Android SDK Packages
+    shell: bash
+    run: |
+      set -euo pipefail
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
+      SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 
-      - name: Run unit tests
-        run: gradle :app:testDebugUnitTest --no-daemon --stacktrace
+      if [ -z "$SDK_ROOT" ]; then
+        echo "ERROR: Android SDK not found."
+        exit 1
+      fi
 
-      - name: Build APK
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+      SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: NEW-DUBAI-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
+      if [ -z "$SDKMANAGER" ]; then
+        echo "ERROR: sdkmanager not found."
+        exit 1
+      fi
+
+      yes | "$SDKMANAGER" --licenses || true
+
+      "$SDKMANAGER" --install \
+        "platform-tools" \
+        "platforms;android-34" \
+        "build-tools;34.0.0"
+
+  - name: Setup Gradle 8.7
+    uses: gradle/actions/setup-gradle@v4
+    with:
+      gradle-version: '8.7'
+
+  - name: Run Unit Tests
+    run: gradle :app:testDebugUnitTest --no-daemon --stacktrace
+
+  - name: Build Debug APK
+    run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+  - name: Upload APK Artifact
+    uses: actions/upload-artifact@v4
+    with:
+      name: NEW-DUBAI-APK
+      path: app/build/outputs/apk/debug/app-debug.apk
+      if-no-files-found: error
+      retention-days: 7
